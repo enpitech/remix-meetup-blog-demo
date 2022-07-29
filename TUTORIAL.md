@@ -144,3 +144,52 @@ export default function Posts() {
   );
 }
 ```
+
+## A little Refactoring
+
+- Separation of concern: our model should handle data operations
+
+### 💿 Create app/models/post.server.ts
+
+```
+type Post = {
+  slug: string;
+  title: string;
+};
+
+export async function getPosts(): Promise<Array<Post>> {
+  return [
+    {
+      slug: "my-first-post",
+      title: "My First Post",
+    },
+    {
+      slug: "90s-mixtape",
+      title: "A Mixtape I Made Just For You",
+    },
+  ];
+}
+
+```
+
+### 💿 Update the posts route to use our new posts module:
+
+```
+import { json } from "@remix-run/node";
+import { Link, useLoaderData } from "@remix-run/react";
+
+import { getPosts } from "~/models/post.server";
+
+type LoaderData = {
+  // this is a handy way to say: "posts is whatever type getPosts resolves to"
+  posts: Awaited<ReturnType<typeof getPosts>>;
+};
+
+export const loader = async () => {
+  return json<LoaderData>({
+    posts: await getPosts(),
+  });
+};
+
+// ...
+```
