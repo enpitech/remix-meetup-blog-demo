@@ -1,4 +1,4 @@
-# Demo instructions
+# Blog tutorial instructions
 
 ## Remix Stacks
 
@@ -935,3 +935,79 @@ export const action: ActionFunction = async ({
   return redirect("/posts/admin");
 };
 ```
+
+## Progressive Enhancement
+
+- branch `stage-8-progressive-enhancement`
+
+### 💿 Slow down our action with a fake delay
+
+`app/routes/posts/admin/new.tsx`
+
+```
+// ...
+export const action: ActionFunction = async ({
+  request,
+}) => {
+  // TODO: remove me
+  await new Promise((res) => setTimeout(res, 1000));
+
+  // ...
+};
+//...
+```
+
+### 💿 Add some pending UI with useTransition
+
+`app/routes/posts/admin/new.tsx`
+
+```
+import { json, redirect } from "@remix-run/node";
+import {
+  Form,
+  useActionData,
+  useTransition,
+} from "@remix-run/react";
+
+// ..
+
+export default function NewPost() {
+  const errors = useActionData();
+
+  const transition = useTransition();
+  const isCreating = Boolean(transition.submission);
+
+  return (
+    <Form method="post">
+      {/* ... */}
+      <p className="text-right">
+        <button
+          type="submit"
+          className="rounded bg-blue-500 py-2 px-4 text-white hover:bg-blue-600 focus:bg-blue-400 disabled:bg-blue-300"
+          disabled={isCreating}
+        >
+          {isCreating ? "Creating..." : "Create Post"}
+        </button>
+      </p>
+    </Form>
+  );
+}
+```
+
+## Homework
+
+Here are more things for you to learn :)
+
+Update/Delete posts: make an /admin/$slug.tsx page for your posts. This should open an edit page for the post that allows you to update the post or even delete it. The links are already there in the sidebar but they return 404! Create a new route that reads the posts, and puts them into the fields. All the code you need is already in app/routes/posts/$slug.tsx and app/routes/posts/admin/new.tsx. You just gotta put it together.
+
+Optimistic UI: You know how when you favorite a tweet, the heart goes red instantly and if the tweet is deleted it reverts back to empty? That's Optimistic UI: assume the request will succeed, and render what the user will see if it does. So your homework is to make it so when you hit "Create" it renders the post in the left nav and renders the "Create a New Post" link (or if you add update/delete do it for those too). You'll find this ends up being easier than you think even if it takes you a second to arrive there (and if you've implemented this pattern in the past, you'll find Remix makes this much easier). Learn more from the Optimistic UI guide.
+
+Authenticated users only: Another cool bit of homework you could do is make it so only authenticated users can create posts. You've already got authentication all set up for you thanks to the Indie Stack. Tip, if you want to make it so you're the only one who can make posts, then simply check the user's email in your loaders and actions and if it's not yours redirect them somewhere 😈
+
+Customize the app: If you're happy with tailwind, keep it around, otherwise, check the styling guide to learn of other options. Remove the Notes model and routes, etc. Whatever you want to make this thing yours.
+
+Deploy the app: Check the README of your project. It has instructions you can follow to get your app deployed to Fly.io. Then you can actually start blogging!
+
+# Credits
+
+This tutorial was taken from the [Remix website tutorial](https://remix.run/docs/en/v1/tutorials/blog)
