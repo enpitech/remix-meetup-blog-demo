@@ -1,6 +1,14 @@
-# Demo instructions
+# Blog tutorial instructions
+
+## Remix Stacks
+
+- branch `stage-0-clean-project`
+  Start by cloning the repo, checkout the stage-0 branch and run npm install
+  You're ready to go 💪
 
 ## First Route
+
+- branch `stage-1-first-route`
 
 ### 💿 Add a link to posts in app/routes/index.tsx
 
@@ -31,6 +39,8 @@ export default function Posts() {
 - Click on the link 🎉
 
 ## Loading Data
+
+- branch `stage-2-loading-data`
 
 ### 💿 Make the posts route "loader"
 
@@ -149,6 +159,8 @@ export default function Posts() {
 
 ## A little Refactoring
 
+- branch `stage-3-a-little-refactoring`
+
 - Separation of concern: our model should handle data operations
 
 ### 💿 Create app/models/post.server.ts
@@ -197,6 +209,8 @@ export const loader = async () => {
 ```
 
 ## Pulling From a Data Source
+
+- branch `stage-4-pulling-from-a-data-source`
 
 ### 💿 First, we need to update our Prisma schema
 
@@ -293,6 +307,8 @@ export async function getPosts() {
 ### 💿 Now that the Prisma client has been updated, we will need to restart our server. So stop the dev server and start it back up again with npm run dev.
 
 ## Dynamic Route Params
+
+- branch `stage-5-dynamic-route-params`
 
 - Now let's make a route to actually view the post. We want these URLs to work:
   ```
@@ -490,6 +506,8 @@ export default function PostSlug() {
 
 ## Nested Routing
 
+- branch `stage-6-nested-routing`
+
 ### 💿 First, let's add a link to the admin section on the posts index route:
 
 `/app/routes/posts/index.tsx`
@@ -633,3 +651,363 @@ export default function NewPost() {
   return <h2>New Post</h2>;
 }
 ```
+
+## Actions
+
+- branch `stage-7-actions`
+
+### 💿 Add a form to the new route
+
+`app/routes/posts/admin/new.tsx`
+
+```
+import { Form } from "@remix-run/react";
+
+const inputClassName = `w-full rounded border border-gray-500 px-2 py-1 text-lg`;
+
+export default function NewPost() {
+  return (
+    <Form method="post">
+      <p>
+        <label>
+          Post Title:{" "}
+          <input
+            type="text"
+            name="title"
+            className={inputClassName}
+          />
+        </label>
+      </p>
+      <p>
+        <label>
+          Post Slug:{" "}
+          <input
+            type="text"
+            name="slug"
+            className={inputClassName}
+          />
+        </label>
+      </p>
+      <p>
+        <label htmlFor="markdown">Markdown:</label>
+        <br />
+        <textarea
+          id="markdown"
+          rows={20}
+          name="markdown"
+          className={`${inputClassName} font-mono`}
+        />
+      </p>
+      <p className="text-right">
+        <button
+          type="submit"
+          className="rounded bg-blue-500 py-2 px-4 text-white hover:bg-blue-600 focus:bg-blue-400 disabled:bg-blue-300"
+        >
+          Create Post
+        </button>
+      </p>
+    </Form>
+  );
+}
+```
+
+### 💿 Add createPost anywhere inside of app/models/post.server.ts
+
+`app/models/post.server.ts`
+
+```
+// ...
+export async function createPost(post) {
+  return prisma.post.create({ data: post });
+}
+```
+
+### 💿 Call createPost from the new post route's action
+
+```
+import { redirect } from "@remix-run/node";
+import { Form } from "@remix-run/react";
+
+import { createPost } from "~/models/post.server";
+
+export const action = async ({ request }) => {
+  const formData = await request.formData();
+
+  const title = formData.get("title");
+  const slug = formData.get("slug");
+  const markdown = formData.get("markdown");
+
+  await createPost({ title, slug, markdown });
+
+  return redirect("/posts/admin");
+};
+
+// ...
+```
+
+### 💿 Add the types to both files we changed
+
+`app/models/post.server.ts`
+
+```
+// ...
+import type { Post } from "@prisma/client";
+export type { Post };
+
+// ...
+
+export async function createPost(
+  post: Pick<Post, "slug" | "title" | "markdown">
+) {
+  return prisma.post.create({ data: post });
+}
+```
+
+`app/routes/posts/admin/new.tsx`
+
+```
+
+import type { ActionFunction } from "@remix-run/node";
+import { redirect } from "@remix-run/node";
+import { Form } from "@remix-run/react";
+
+import { createPost } from "~/models/post.server";
+
+export const action: ActionFunction = async ({
+request,
+}) => {
+const formData = await request.formData();
+
+const title = formData.get("title");
+const slug = formData.get("slug");
+const markdown = formData.get("markdown");
+
+await createPost({ title, slug, markdown });
+
+return redirect("/posts/admin");
+};
+
+// ...
+
+```
+
+### 💿 Validate if the form data contains what we need, and return the errors if not
+
+`app/routes/posts/admin/new.tsx`
+
+```
+import type { ActionFunction } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import { Form } from "@remix-run/react";
+
+import { createPost } from "~/models/post.server";
+
+type ActionData =
+  | {
+      title: null | string;
+      slug: null | string;
+      markdown: null | string;
+    }
+  | undefined;
+export const action: ActionFunction = async ({
+  request,
+}) => {
+  const formData = await request.formData();
+
+  const title = formData.get("title");
+  const slug = formData.get("slug");
+  const markdown = formData.get("markdown");
+
+  const errors: ActionData = {
+    title: title ? null : "Title is required",
+    slug: slug ? null : "Slug is required",
+    markdown: markdown ? null : "Markdown is required",
+  };
+  const hasErrors = Object.values(errors).some(
+    (errorMessage) => errorMessage
+  );
+  if (hasErrors) {
+    return json<ActionData>(errors);
+  }
+
+  await createPost({ title, slug, markdown });
+
+  return redirect("/posts/admin");
+};
+
+// ...
+```
+
+### 💿 Add validation messages to the UI
+
+`app/routes/posts/admin/new.tsx`
+
+```
+import type { ActionFunction } from "@remix-run/node";
+import { redirect, json } from "@remix-run/node";
+import { Form, useActionData } from "@remix-run/react";
+
+// ...
+
+const inputClassName = `w-full rounded border border-gray-500 px-2 py-1 text-lg`;
+
+export default function NewPost() {
+  const errors = useActionData();
+
+  return (
+    <Form method="post">
+      <p>
+        <label>
+          Post Title:{" "}
+          {errors?.title ? (
+            <em className="text-red-600">{errors.title}</em>
+          ) : null}
+          <input type="text" name="title" className={inputClassName} />
+        </label>
+      </p>
+      <p>
+        <label>
+          Post Slug:{" "}
+          {errors?.slug ? (
+            <em className="text-red-600">{errors.slug}</em>
+          ) : null}
+          <input type="text" name="slug" className={inputClassName} />
+        </label>
+      </p>
+      <p>
+        <label htmlFor="markdown">
+          Markdown:{" "}
+          {errors?.markdown ? (
+            <em className="text-red-600">
+              {errors.markdown}
+            </em>
+          ) : null}
+        </label>
+        <br />
+        <textarea
+          id="markdown"
+          rows={20}
+          name="markdown"
+          className={`${inputClassName} font-mono`}
+        />
+      </p>
+      <p className="text-right">
+        <button
+          type="submit"
+          className="rounded bg-blue-500 py-2 px-4 text-white hover:bg-blue-600 focus:bg-blue-400 disabled:bg-blue-300"
+        >
+          Create Post
+        </button>
+      </p>
+    </Form>
+  );
+}
+```
+
+### Typescript fix
+
+`app/routes/posts/admin/new.tsx`
+
+```
+//...
+import invariant from "tiny-invariant";
+// ..
+
+export const action: ActionFunction = async ({
+  request,
+}) => {
+  // ...
+  invariant(
+    typeof title === "string",
+    "title must be a string"
+  );
+  invariant(
+    typeof slug === "string",
+    "slug must be a string"
+  );
+  invariant(
+    typeof markdown === "string",
+    "markdown must be a string"
+  );
+
+  await createPost({ title, slug, markdown });
+
+  return redirect("/posts/admin");
+};
+```
+
+## Progressive Enhancement
+
+- branch `stage-8-progressive-enhancement`
+
+### 💿 Slow down our action with a fake delay
+
+`app/routes/posts/admin/new.tsx`
+
+```
+// ...
+export const action: ActionFunction = async ({
+  request,
+}) => {
+  // TODO: remove me
+  await new Promise((res) => setTimeout(res, 1000));
+
+  // ...
+};
+//...
+```
+
+### 💿 Add some pending UI with useTransition
+
+`app/routes/posts/admin/new.tsx`
+
+```
+import { json, redirect } from "@remix-run/node";
+import {
+  Form,
+  useActionData,
+  useTransition,
+} from "@remix-run/react";
+
+// ..
+
+export default function NewPost() {
+  const errors = useActionData();
+
+  const transition = useTransition();
+  const isCreating = Boolean(transition.submission);
+
+  return (
+    <Form method="post">
+      {/* ... */}
+      <p className="text-right">
+        <button
+          type="submit"
+          className="rounded bg-blue-500 py-2 px-4 text-white hover:bg-blue-600 focus:bg-blue-400 disabled:bg-blue-300"
+          disabled={isCreating}
+        >
+          {isCreating ? "Creating..." : "Create Post"}
+        </button>
+      </p>
+    </Form>
+  );
+}
+```
+
+## Homework
+
+Here are more things for you to learn :)
+
+Update/Delete posts: make an /admin/$slug.tsx page for your posts. This should open an edit page for the post that allows you to update the post or even delete it. The links are already there in the sidebar but they return 404! Create a new route that reads the posts, and puts them into the fields. All the code you need is already in app/routes/posts/$slug.tsx and app/routes/posts/admin/new.tsx. You just gotta put it together.
+
+Optimistic UI: You know how when you favorite a tweet, the heart goes red instantly and if the tweet is deleted it reverts back to empty? That's Optimistic UI: assume the request will succeed, and render what the user will see if it does. So your homework is to make it so when you hit "Create" it renders the post in the left nav and renders the "Create a New Post" link (or if you add update/delete do it for those too). You'll find this ends up being easier than you think even if it takes you a second to arrive there (and if you've implemented this pattern in the past, you'll find Remix makes this much easier). Learn more from the Optimistic UI guide.
+
+Authenticated users only: Another cool bit of homework you could do is make it so only authenticated users can create posts. You've already got authentication all set up for you thanks to the Indie Stack. Tip, if you want to make it so you're the only one who can make posts, then simply check the user's email in your loaders and actions and if it's not yours redirect them somewhere 😈
+
+Customize the app: If you're happy with tailwind, keep it around, otherwise, check the styling guide to learn of other options. Remove the Notes model and routes, etc. Whatever you want to make this thing yours.
+
+Deploy the app: Check the README of your project. It has instructions you can follow to get your app deployed to Fly.io. Then you can actually start blogging!
+
+# Credits
+
+This tutorial was taken from the [Remix website tutorial](https://remix.run/docs/en/v1/tutorials/blog)
