@@ -4,7 +4,8 @@
 
 ### 💿 Add a link to posts in app/routes/index.tsx
 
-``<div className="mx-auto mt-16 max-w-7xl text-center">
+```
+<div className="mx-auto mt-16 max-w-7xl text-center">
 
   <Link
     to="/posts"
@@ -12,7 +13,8 @@
   >
     Blog Posts
   </Link>
-</div>``
+</div>
+```
 
 ### 💿 Create a new file in app/routes/posts/index.tsx
 
@@ -289,3 +291,199 @@ export async function getPosts() {
 ```
 
 ### 💿 Now that the Prisma client has been updated, we will need to restart our server. So stop the dev server and start it back up again with npm run dev.
+
+## Dynamic Route Params
+
+- Now let's make a route to actually view the post. We want these URLs to work:
+  ```
+  /posts/my-first-post
+  /posts/90s-mixtape
+  ```
+
+### 💿 Create a dynamic route at "app/routes/posts/$slug.tsx"
+
+`app/routes/posts/\$slug.tsx`
+
+```
+export default function PostSlug() {
+  return (
+    <main className="mx-auto max-w-4xl">
+      <h1 className="my-6 border-b-2 text-center text-3xl">
+        Some Post
+      </h1>
+    </main>
+  );
+}
+```
+
+### 💿 Add a loader to access the params
+
+```
+import { json } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
+
+export const loader = async ({ params }) => {
+  return json({ slug: params.slug });
+};
+
+export default function PostSlug() {
+  const { slug } = useLoaderData();
+  return (
+    <main className="mx-auto max-w-4xl">
+      <h1 className="my-6 border-b-2 text-center text-3xl">
+        Some Post: {slug}
+      </h1>
+    </main>
+  );
+}
+```
+
+### 💿 Let's get some help from TypeScript for the loader function signature.
+
+```
+import type { LoaderFunction } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
+
+export const loader: LoaderFunction = async ({
+  params,
+}) => {
+  return json({ slug: params.slug });
+};
+```
+
+### 💿 Add a getPost function to our post module
+
+- Update the `app/models/post.server.ts` file:
+
+```
+import { prisma } from "~/db.server";
+
+export type { Post } from "@prisma/client";
+
+export async function getPosts() {
+  return prisma.post.findMany();
+}
+
+export async function getPost(slug: string) {
+  return prisma.post.findUnique({ where: { slug } });
+}
+```
+
+- If you see a TypeScript warning, such as TS2305: Module '"@prisma/client"' has no exported member 'Post'., you may need to restart your editor.
+
+### 💿 Use the new getPost function in the route
+
+`app/routes/posts/$slug.tsx`
+
+```
+import type { LoaderFunction } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
+
+import { getPost } from "~/models/post.server";
+
+export const loader: LoaderFunction = async ({
+  params,
+}) => {
+  const post = await getPost(params.slug);
+  return json({ post });
+};
+
+export default function PostSlug() {
+  const { post } = useLoaderData();
+  return (
+    <main className="mx-auto max-w-4xl">
+      <h1 className="my-6 border-b-2 text-center text-3xl">
+        {post.title}
+      </h1>
+    </main>
+  );
+}
+```
+
+### 💿 Let's make TypeScript happy with our code:
+
+`app/routes/posts/$slug.tsx`
+
+```
+import type { LoaderFunction } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
+import invariant from "tiny-invariant";
+
+import type { Post } from "~/models/post.server";
+import { getPost } from "~/models/post.server";
+
+type LoaderData = { post: Post };
+
+export const loader: LoaderFunction = async ({
+  params,
+}) => {
+  invariant(params.slug, `params.slug is required`);
+
+  const post = await getPost(params.slug);
+  invariant(post, `Post not found: ${params.slug}`);
+
+  return json<LoaderData>({ post });
+};
+
+export default function PostSlug() {
+  const { post } = useLoaderData() as LoaderData;
+  return (
+    <main className="mx-auto max-w-4xl">
+      <h1 className="my-6 border-b-2 text-center text-3xl">
+        {post.title}
+      </h1>
+    </main>
+  );
+}
+```
+
+### 💿 Parse the markdown into HTML
+
+```
+npm add marked
+# if using typescript
+npm add @types/marked -D
+```
+
+- restart our server
+  `app/routes/posts/$slug.tsx`
+
+```
+import { marked } from "marked";
+import type { LoaderFunction } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
+import invariant from "tiny-invariant";
+
+import type { Post } from "~/models/post.server";
+import { getPost } from "~/models/post.server";
+
+type LoaderData = { post: Post; html: string };
+
+export const loader: LoaderFunction = async ({
+  params,
+}) => {
+  invariant(params.slug, `params.slug is required`);
+
+  const post = await getPost(params.slug);
+  invariant(post, `Post not found: ${params.slug}`);
+
+  const html = marked(post.markdown);
+  return json<LoaderData>({ post, html });
+};
+
+export default function PostSlug() {
+  const { post, html } = useLoaderData() as LoaderData;
+  return (
+    <main className="mx-auto max-w-4xl">
+      <h1 className="my-6 border-b-2 text-center text-3xl">
+        {post.title}
+      </h1>
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+    </main>
+  );
+}
+```
