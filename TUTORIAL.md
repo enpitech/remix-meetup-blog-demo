@@ -487,3 +487,149 @@ export default function PostSlug() {
   );
 }
 ```
+
+## Nested Routing
+
+### 💿 First, let's add a link to the admin section on the posts index route:
+
+`/app/routes/posts/index.tsx`
+
+```
+// ...
+<Link to="admin" className="text-red-600 underline">
+  Admin
+</Link>
+// ...
+```
+
+### 💿 Create an admin route within the posts directory:
+
+`app/routes/posts/admin.tsx`
+
+```
+import type { LoaderFunction } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { Link, useLoaderData } from "@remix-run/react";
+
+import { getPosts } from "~/models/post.server";
+
+type LoaderData = {
+  posts: Awaited<ReturnType<typeof getPosts>>;
+};
+
+export const loader: LoaderFunction = async () => {
+  return json({ posts: await getPosts() });
+};
+
+export default function PostAdmin() {
+  const { posts } = useLoaderData() as LoaderData;
+  return (
+    <div className="mx-auto max-w-4xl">
+      <h1 className="my-6 mb-2 border-b-2 text-center text-3xl">
+        Blog Admin
+      </h1>
+      <div className="grid grid-cols-4 gap-6">
+        <nav className="col-span-4 md:col-span-1">
+          <ul>
+            {posts.map((post) => (
+              <li key={post.slug}>
+                <Link
+                  to={post.slug}
+                  className="text-blue-600 underline"
+                >
+                  {post.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <main className="col-span-4 md:col-span-3">
+          ...
+        </main>
+      </div>
+    </div>
+  );
+}
+```
+
+- ## Index Routes
+
+### 💿 Create a folder for admin.tsx's child routes, with an index inside
+
+`app/routes/posts/admin/index.tsx`
+
+```
+import { Link } from "@remix-run/react";
+
+export default function AdminIndex() {
+  return (
+    <p>
+      <Link to="new" className="text-blue-600 underline">
+        Create a New Post
+      </Link>
+    </p>
+  );
+}
+```
+
+### 💿 Add an outlet to the admin page
+
+```
+import type { LoaderFunction } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import {
+  Link,
+  Outlet,
+  useLoaderData,
+} from "@remix-run/react";
+
+import { getPosts } from "~/models/post.server";
+
+type LoaderData = {
+  posts: Awaited<ReturnType<typeof getPosts>>;
+};
+
+export const loader: LoaderFunction = async () => {
+  return json({ posts: await getPosts() });
+};
+
+export default function PostAdmin() {
+  const { posts } = useLoaderData() as LoaderData;
+  return (
+    <div className="mx-auto max-w-4xl">
+      <h1 className="my-6 mb-2 border-b-2 text-center text-3xl">
+        Blog Admin
+      </h1>
+      <div className="grid grid-cols-4 gap-6">
+        <nav className="col-span-4 md:col-span-1">
+          <ul>
+            {posts.map((post) => (
+              <li key={post.slug}>
+                <Link
+                  to={post.slug}
+                  className="text-blue-600 underline"
+                >
+                  {post.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <main className="col-span-4 md:col-span-3">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
+```
+
+### 💿 Create the app/routes/posts/admin/new.tsx route
+
+`app/routes/posts/admin/new.tsx`
+
+```
+export default function NewPost() {
+  return <h2>New Post</h2>;
+}
+```
