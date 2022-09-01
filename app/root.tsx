@@ -32,7 +32,7 @@ export default function App() {
   return (
     <html lang="en" className="h-full">
       <head>
-        <Meta />
+        <MetaData />
         <Links />
       </head>
       <body className="h-full">
