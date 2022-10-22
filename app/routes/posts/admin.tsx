@@ -13,7 +13,7 @@ export const loader: LoaderFunction = async () => {
 };
 
 export default function PostAdmin() {
-  const { posts } = useLoaderData() as LoaderData;
+  const { posts } = useLoaderData<LoaderData>();
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="my-6 mb-2 border-b-2 text-center text-3xl">Blog Admin</h1>
@@ -29,7 +29,7 @@ export default function PostAdmin() {
             ))}
           </ul>
         </nav>
-        <main className="col-span-4 md:col-span-3">
+        <main className="col-span-4  p-5 shadow-md md:col-span-3">
           <Outlet />
         </main>
       </div>
