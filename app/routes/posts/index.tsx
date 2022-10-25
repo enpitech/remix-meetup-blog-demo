@@ -2,7 +2,7 @@ import { json } from "@remix-run/node";
 import { Link, useLoaderData } from "@remix-run/react";
 import { getPosts } from "~/models/post.server";
 
-type Post = {
+export type Post = {
   slug: string;
   title: string;
 };
