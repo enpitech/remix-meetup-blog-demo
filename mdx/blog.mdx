@@ -1,0 +1,514 @@
+# Remix.run data flow
+
+remix philosophy is that we should embrace server/client model, including separation of source code from content/data.
+today technology allows us to calculate thing FAST
+which means we can make a website very fast.
+what we can’t make fast is the user network.
+the only thing we can do in order to make a website load faster, is to **decrease the amount of stuff we send over the network**.
+less JavaScript, less JSON, less CSS.
+
+> Thanks `Remix.run` for the wonderful content that will be shown in this data flow guide
+
+## Goal
+
+in this article i would explain on how remix let's us read and write data on the server with `loader` and `action` functions and some hooks, and understand the data flow of Remix applications.
+
+---
+
+There are a lot of ways Remix helps us send less stuff over the network, here’s one example:
+
+Consider the Github Gist API. This payload is 75kb unpacked and 12kb over the network compressed.
+If you fetch it in the browser you make the user download all of it. It might look like this:
+
+```javascript
+export default function Gists() {
+  const gists = useSomeFetchWrapper("https://api.github.com/gists");
+
+  if (!gists) {
+    return <Skeleton />;
+  }
+
+  return (
+    <ul>
+      {gists.map((gist) => (
+        <li key={gist.id}>
+          <a href={gist.html_url}>
+            {gist.description}, {gist.owner.login}
+          </a>
+
+          <ul>
+            {Object.keys(gist.files).map((key) => (
+              <li key={key}>{key}</li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+with `Remix`, we can filter down the data on the server **before send it out to the user**:
+
+```javascript
+export const loader = async () => {
+  // make sure to export it with this specific name "loader"
+  const res = await fetch("https://api.github.com/gists");
+  const gists = await res.json();
+  const filteredGists = gists.map((gist) => {
+    return {
+      description: gist.description,
+      url: gist.html_url,
+      files: Object.keys(gist.files),
+      owner: gist.owner.login,
+    };
+  });
+
+  // json is a wrapper function for sending
+  // new response with "Content-Type": "application/json"
+  return json(filteredGists);
+};
+
+export default function Gists() {
+  const gists = useLoaderData();
+  return (
+    <ul>
+      {gists.map((gist) => (
+        <li key={gist.id}>
+          <a href={gist.url}>
+            {gist.description}, {gist.owner}
+          </a>
+          <ul>
+            {gist.files.map((key) => (
+              <li key={key}>{key}</li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+This drops the payload from 12kB compressed, 75kB total to 1.8kB compressed, 3.8kB total. That's 20x smaller!
+We also don't need to render loaders or skeletons while the data is loading because the page is rendering on the server.
+
+## Remix is a server side rendering framework
+
+Each route module can export a component and a loader.
+useLoaderData will provide the loader's data to your component
+on every page request Remix will run the page loader (if exists) before rendering the page on the server.
+in order to access the loader returned data - we `useLoaderData` and extract the data from it
+this method allows us to write cleaner and more maintainable code while take advantage of remix features like:
+
+- Ensure the data in the UI is in sync with the data on the server by revalidating after actions
+- Fetch data, JavaScript modules, CSS and other assets in parallel on transitions, avoiding render+fetch waterfalls that lead to choppy UI
+- scroll restoration on back/forward clicks (even across domains)
+- Be resilient to network conditions when JavaScript fails to load.
+
+lets see an example of fetching posts:
+
+```javascript
+import { json } from "@remix-run/node";
+import { Link, useLoaderData } from "@remix-run/react";
+import { getPosts } from "~/models/post.server";
+
+type Post = {
+  slug: string;
+  title: string;
+};
+
+type LoaderData = {
+  posts: Array<Post>;
+};
+
+export const loader = async () => {
+  const posts = await getPosts();
+  return json<LoaderData>({ posts });
+};
+
+
+export default function Posts() {
+  // these are the posts returned from the loader
+  const { posts } = useLoaderData<LoaderData>();
+
+  return (
+    <main>
+      <h1>Posts</h1>
+      <ul>
+        {posts.map((post) => (
+          <li key={post.slug}>
+            <Link to={post.slug}>
+              {post.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+```
+
+the loader function is a replacement for the `GET` endpoint of your CRUD application.
+it is usually used to fetch data when page loads/revalidates.
+
+---
+
+## Actions (POST/PUT/DELETE)
+
+just like `loader`, action is a server side function to handle data mutations and other actions,
+if a non GET request is made to your route (POST, PUT, PATCH, DELETE) then the action is called before re running the loader again (of the same route)
+
+actions have the same API as loaders, the only difference is when they are called.
+
+this enables us to co-locate everything about a dataset in a single route module:
+
+- data read
+- UI
+- data writes
+
+```javascript
+import { json, redirect } from "@remix-run/node"; // or cloudflare/deno
+import { Form } from "@remix-run/react";
+
+import { fakeGetTodos, fakeCreateTodo } from "~/utils/db";
+import { TodoList } from "~/components/TodoList";
+
+export async function loader() {
+  return json(await fakeGetTodos());
+}
+
+export async function action({ request }) {
+  const body = await request.formData();
+  const todo = await fakeCreateTodo({
+    title: body.get("title"),
+  });
+  return json({ todo });
+}
+
+export default function Todos() {
+  const data = useLoaderData();
+  return (
+    <div>
+      <TodoList todos={data} />
+      <Form method="post">
+        <input type="text" name="title" />
+        <button type="submit">Create Todo</button>
+      </Form>
+    </div>
+  );
+}
+```
+
+The flow of the above route will be like that:
+
+1. the loader function is called
+2. the component renders on the server
+3. the component is hydrates on the client browser [read more on hydration](https://beta.reactjs.org/apis/react-dom/hydrate)
+4. user submit a new todo with the `<Form/>`
+5. the action function is called and do its thing
+6. the loader running again to make sure the data on the client is fresh
+
+note that with this pattern, you dont need to manage local state of the Todo's list because on every action submitted, the loader will re-hydrate the data!
+
+when a post is made to a url, multiple routes in the route hierarchy will match the url.
+unlike a GET to loaders, where all of them are called to build the UI, ** only one actions is called**
+
+The route called will be the deepest matching route, unless the deepest matching route is an "index route". In this case, it will post to the parent route of the index (because they share the same URL, the parent wins).
+
+> **Note**: forms without action prop will automatically post to the same route within wich they are rendered
+
+### How to find out what method is called the action
+
+the request object available in the action/loader options has the called method
+
+lets look at the example of our blog tutorial:
+
+```javascript
+import { Form, useLoaderData, useTransition } from "@remix-run/react";
+
+import {
+  ActionFunction,
+  json,
+  LoaderFunction,
+  redirect,
+} from "@remix-run/server-runtime";
+
+import { deletePost, getPost, Post, updatePost } from "~/models/post.server";
+
+export const loader: LoaderFunction = async ({ params }) => {
+  const post = await getPost(params.slug);
+  return json(post);
+};
+
+export const action: ActionFunction = async ({ request, params }) => {
+  switch (request.method) {
+    case "DELETE": {
+      await deletePost(params.slug);
+      return redirect("/posts/admin");
+    }
+
+    case "PUT": {
+      const formData = await request.formData();
+
+      const post = Object.fromEntries(formData);
+
+      await updatePost(params.slug, post);
+
+      return redirect(`/posts/${post.slug}`);
+    }
+  }
+
+  // if its none of the above, do nothing and return
+  return {};
+};
+
+export default function PostSlug() {
+  const post = useLoaderData();
+
+  const transition = useTransition();
+
+  const isSubmitting = transition.state === "submitting";
+
+  const isDeleting = isSubmitting && transition.submission?.method === "DELETE";
+
+  return (
+    <div>
+      <h1>{post.title}</h1>
+
+      <Form method="delete"> Delete form ... </Form>
+
+      <Form method="put"> Update form ... </Form>
+    </div>
+  );
+}
+```
+
+---
+
+## what if we want to fetch loader data again for some reason or submit action without redirecting the page?
+
+in HTML/HTTP, data mutations and loads are modeled with navigation: `<a href> and <form action>`. Both cause a navigation in the browser.
+The Remix equivalents are `<Form />` and `<Link />`
+
+But sometimes you want to call a loader outside of navigation, or call an action
+(and get the routes to reload) but you don't want the URL to change.
+Many interactions with the server aren't navigation events.
+`useFetcher` hook lets you plug your UI into your actions and loaders without navigating.
+
+This is useful when you need to:
+
+- fetch data not associated with UI routes (popovers, dynamic forms, etc.)
+- submit data to actions without navigating (shared components like a newsletter sign ups)
+- handle multiple concurrent submissions in a list (typical "todo app" list where you can click multiple buttons and all be pending at the same time)
+- infinite scroll containers
+- and more!
+
+It is common for Remix newcomers to see this hook and think it is the primary way to interact with the server for data loading and updates--because it looks like what you might have done outside of Remix.
+If your use case can be modeled as "navigation", it's recommended you use one of the core
+data APIs before reaching for useFetcher:
+
+- useLoaderData
+- Form
+- useActionData
+- useTransition
+
+If you're building a highly interactive, "app like" user interface, you will use useFetcher often.
+
+```javascript
+import { useFetcher } from "@remix-run/react";
+
+function SomeComponent() {
+  const fetcher = useFetcher();
+
+  // trigger the fetch with these
+  // it is exactly like <Form /> but doesn't trigger navigation
+  <fetcher.Form {...formOptions} />;
+
+  useEffect(() => {
+    // submit "form" without navigation to action function
+    fetcher.submit(data, options);
+
+    // submit "form" without navigation to loader function
+    fetcher.load(href);
+  }, [fetcher]);
+
+  // build UI with these
+  fetcher.state;
+  fetcher.type;
+  fetcher.submission;
+  fetcher.data;
+}
+```
+
+> `fetcher.data`
+
+The returned response data from your loader or action is stored here.
+Once the data is set, it persists on the fetcher even through reloads and resubmissions (like calling fetcher.load() again after having already read the data).
+
+> `fetcher.state`
+
+You can know the state of the fetcher with fetcher.state. It will be one of:
+
+- idle - nothing is being fetched.
+- submitting - A form has been submitted. If the method is GET, then the route loader is being called. If POST, PUT, PATCH, or DELETE, then the route action is being called.
+- loading - The loaders for the routes are being reloaded after an action submission
+
+> `fetcher.type`
+
+This is the type of state the fetcher is in. It's like fetcher.state, but more granular.
+Depending on the fetcher's state, the types can be the following:
+
+- state === "idle"
+
+  - init - The fetcher isn't doing anything currently and hasn't done anything yet.
+  - done - The fetcher isn't doing anything currently, but it has completed a fetch and you can safely read the fetcher.data.
+
+- state === "submitting"
+
+  - actionSubmission - A form has been submitted with POST, PUT, PATCH, or DELETE, and the action is being called.
+  - loaderSubmission - A form has been submitted with GET and the loader is being called.
+
+- state === "loading"
+
+  - actionReload - The action from an "actionSubmission" returned data and the loaders on the page are being reloaded.
+  - actionRedirect - The action from an "actionSubmission" returned a redirect and the page is transitioning to the new location.
+  - normalLoad - A route's loader is being called without a submission (fetcher.load()).
+
+> `fetcher.submission`
+
+When using `<fetcher.Form>` or `fetcher.submit()`, the form submission is available to build optimistic UI.
+
+It is not available when the fetcher state is "idle" or "loading".
+
+> `fetcher.form`
+
+Just like `<Form>` except it doesn't cause a navigation.
+
+```javascript
+function SomeComponent() {
+  const fetcher = useFetcher();
+  return (
+    <fetcher.Form method="post" action="/some/route">
+      <input type="text" />
+    </fetcher.Form>
+  );
+}
+```
+
+> `fetcher.submit()`
+
+Just like `useSubmit` except it doesn't cause a navigation.
+
+```javascript
+function SomeComponent() {
+  const fetcher = useFetcher();
+
+  const onClick = () => fetcher.submit({ some: "values" }, { method: "post" });
+
+  // ...
+}
+```
+
+Although a URL matches multiple Routes in a remix router hierarchy, a fetcher.submit() call will only call the action on
+the deepest matching route, unless the deepest matching route is an "index route". In this case, it will post to the parent route of the index route (because they share the same URL).
+
+If you want to submit to an index route use ?index in the URL:
+
+> `fetcher.load()`
+
+Loads data from a route loader.
+
+```javascript
+function SomeComponent() {
+  const fetcher = useFetcher();
+
+  useEffect(() => {
+    if (fetcher.type === "init") {
+      fetcher.load("/some/route");
+    }
+  }, [fetcher]);
+
+  fetcher.data; // the data from the loader
+}
+```
+
+Although a URL matches multiple Routes in a remix router hierarchy, a fetcher.load() call
+will only call the loader on the deepest matching route, unless the deepest matching route is an "index route".
+In this case, it will load the parent route of the index route (because they share the same URL).
+If you want to load an index route use ?index in the URL:
+
+```
+fetcher.load("/some/route?index");
+```
+
+---
+
+## Error Handling
+
+Remix offers a new way of handle errors in our routes (Pages).
+Remix automatically catches most errors in our code, on the server or in the browsers, and renders the closest
+`ErrorBoundary` component that defined in the Routes component.
+if you're familliar with React's `componentDidCatch` or `getDerivedStateFromError` class component hooks,
+it's just like that but with some extra handlig for errors on the server!
+
+Remix will automatically catch errors and render the nearest error boundary for errors thrown while:
+
+- rendering in the browser
+- rendering in the server
+- in a loader during the initial server render of the route
+- in an action during the initial server render request
+- in a loader during a client-side transition in the browser
+- in an action during a client-side transition in the browser
+
+### Root error boundary
+
+this component will be rendered when an error thrown in the applications.
+
+you'll want to make sure to still render `Scripts`, `Meta`, and `Links` components because the whole document will mount and unmount
+when the root error boundary is rendered!
+
+> take a look at entry.client.{jsx/tsx} and see that the whole document replaced with `RemixBrowser` component
+
+```javascript
+export function ErrorBoundary({ error }) {
+  console.error(error);
+  return (
+    <html>
+      <head>
+        <title>Woops! something went wrong</title>
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        {/* add the UI you want your users to see when error occured*/}
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+```
+
+### Nested error boundaries
+
+Each route in the hierarchy is a potential error boundary.
+if a nested route exports and error boundary, then any errors below it will be caught and rendered there.
+this means that the rest of the UI in the parent routes ** continue to render normally ** so the user is still able to click another
+link and not lose any client-side state they might have had!
+
+For example, look at these routes:
+
+```
+routes
+├── sales
+│   ├── invoices
+│   │   └── $invoiceId.js
+│   └── invoices.js
+└── sales.js
+```
+
+if `$invoiceId.js` exports an `ErrorBoundary` component and an error is thrown in its component, loader or action,
+the rest of the app renders OK and only the invoice section of the page will render the `ErrorBoundary` UI.
+![image](https://remix.run/docs-images/error-boundary.png "asdas")
+
+If a route doesn't have an error boundary, the error "bubbles up" to the closest error boundary, all the way to the root, so you don't have to add error boundaries to every route--only when you want to add that extra touch to your UI.
