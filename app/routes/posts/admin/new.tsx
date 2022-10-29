@@ -1,5 +1,5 @@
 import type { ActionFunction } from "@remix-run/node";
-import { Form, useActionData, useTransition } from "@remix-run/react";
+import { Form, Link, useActionData, useTransition } from "@remix-run/react";
 import { json, redirect } from "@remix-run/node";
 import { createPost } from "~/models/post.server";
 import invariant from "tiny-invariant";
@@ -34,7 +34,25 @@ export const action: ActionFunction = async ({ request }) => {
   invariant(typeof title === "string", "Title must be a string");
   invariant(typeof slug === "string", "Slug must be a string");
   invariant(typeof markdown === "string", "Markdown must be a string");
-  await createPost({ title, slug, markdown });
+  try {
+    // randomly throwing an error to simulate optimistic UI revert
+    if (Math.random() > 0.5) {
+      throw new Error("Post creation error");
+    }
+    await createPost({ title, slug, markdown });
+  } catch (e) {
+    // this part is to revert the optimistic UI
+    // Its actually not really matter what the returned object here
+    // Remix will just rerender the correct state from the server thus
+    // 'reverting' to the old state before creating the post
+    // In case we want to alert the user about the error we can use this object
+    return json(
+      { create: "Sorry, we couldn't create the post" },
+      {
+        status: 500,
+      }
+    );
+  }
 
   return redirect("/posts/admin");
 };
@@ -45,8 +63,15 @@ export default function NewPost() {
   const transition = useTransition();
   const isCreating = Boolean(transition.submission);
 
-  return (
+  return isCreating ? (
+    <p>
+      <Link to="new" className="text-blue-600 underline">
+        Create a New Post
+      </Link>
+    </p>
+  ) : (
     <Form method="post">
+      {errors ? <p className="text-red-600">{errors.create}</p> : null}
       <p>
         <label>
           Post Title:{" "}
@@ -85,7 +110,7 @@ export default function NewPost() {
           type="submit"
           className="rounded bg-blue-500 py-2 px-4 text-white hover:bg-blue-600 focus:bg-blue-400 disabled:bg-blue-300"
         >
-          {isCreating ? "Creating..." : "Create Post"}
+          Create Post
         </button>
       </p>
     </Form>

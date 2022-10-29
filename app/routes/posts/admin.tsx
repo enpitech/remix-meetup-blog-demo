@@ -1,6 +1,6 @@
 import type { LoaderFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link, Outlet, useLoaderData } from "@remix-run/react";
+import { Link, Outlet, useLoaderData, useTransition } from "@remix-run/react";
 
 import { getPosts } from "~/models/post.server";
 
@@ -13,6 +13,8 @@ export const loader: LoaderFunction = async () => {
 };
 
 export default function PostAdmin() {
+  const transition = useTransition();
+
   const { posts } = useLoaderData<LoaderData>();
   return (
     <div className="mx-auto max-w-4xl">
@@ -27,6 +29,20 @@ export default function PostAdmin() {
                 </Link>
               </li>
             ))}
+            {transition.submission ? (
+              <Link
+                to={
+                  Object.fromEntries(transition.submission.formData)
+                    .slug as string
+                }
+                className="text-blue-600 underline"
+              >
+                {
+                  Object.fromEntries(transition.submission.formData)
+                    .title as string
+                }
+              </Link>
+            ) : null}
           </ul>
         </nav>
         <main className="col-span-4  md:col-span-3">
