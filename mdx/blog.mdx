@@ -1,4 +1,16 @@
-# Remix.run data flow
+# Remix.run Basics tutorial
+
+## What is Remix?
+
+Remix is a full stack web framework that lets you focus on the user interface and work back through web standards to deliver a fast,
+slick, and resilient user experience.
+
+Remix is four things:
+
+- compiler
+- server side HTTP handler
+- server framework
+- browser framework
 
 remix philosophy is that we should embrace server/client model, including separation of source code from content/data.
 today technology allows us to calculate thing FAST
@@ -7,7 +19,7 @@ what we can’t make fast is the user network.
 the only thing we can do in order to make a website load faster, is to **decrease the amount of stuff we send over the network**.
 less JavaScript, less JSON, less CSS.
 
-> Thanks `Remix.run` for the wonderful content that will be shown in this data flow guide
+> Thanks `Remix.run` for the majority of the content that will be shown in this tutorial
 
 ## Goal
 
@@ -286,6 +298,79 @@ export default function PostSlug() {
 
 ---
 
+## useTransition
+
+this hook tells us everything we need to know about a page transition to build pending navigation indicators and optimistic UI on data mutations
+for example:
+
+- Global loading spinners
+- spinners on clicked links
+- disabling things while actions/loaders are running
+- adding spinners to submit buttons
+- Optimistically showing a new record while it's being created on the server
+- Optimistically showing the new state of a record while it's being updated
+
+```javascript
+import { useTransition } from "@remix-run/react";
+
+function SomeComponent() {
+  const transition = useTransition();
+  transition.state;
+  transition.type;
+  transition.submission;
+  transition.location;
+}
+```
+
+### **transition.state**
+
+You can know the state of the transition with transition.state. It will be one of:
+
+- idle
+- submitting
+- loading
+
+### **transition.state**
+
+Most pending UI only cares about transition.state, but the transition can tell you even more information on transition.type.
+
+### **transition.submission**
+
+Any transition that started from a `<Form>` or useSubmit will have your form's submission attached to it. This is primarily useful
+to build "Optimistic UI" with the submission.formData FormData object.
+
+### **transition.location**
+
+This tells you what the next location is going to be.
+It's most useful when matching against the next URL for custom links and hooks.
+
+For example, this Link knows when its page is loading and about to become active:
+
+```javascript
+import { Link, useResolvedPath } from "@remix-run/react";
+
+function PendingLink({ to, children }) {
+  const transition = useTransition();
+  const path = useResolvedPath(to);
+
+  const isPending =
+    transition.state === "loading" &&
+    transition.location.pathname === path.pathname;
+
+  return (
+    <Link
+      data-pending={isPending ? "true" : null}
+      to={to}
+      children={children}
+    />
+  );
+}
+```
+
+[read more on the useTransition hook](https://remix.run/docs/en/v1/api/remix#usetransition)
+
+---
+
 ## what if we want to fetch loader data again for some reason or submit action without redirecting the page?
 
 in HTML/HTTP, data mutations and loads are modeled with navigation: `<a href> and <form action>`. Both cause a navigation in the browser.
@@ -461,7 +546,7 @@ Remix will automatically catch errors and render the nearest error boundary for 
 - in a loader during a client-side transition in the browser
 - in an action during a client-side transition in the browser
 
-### Root error boundary
+### **Root Error Boundary**
 
 this component will be rendered when an error thrown in the applications.
 
@@ -489,7 +574,7 @@ export function ErrorBoundary({ error }) {
 }
 ```
 
-### Nested error boundaries
+### **Nested error boundaries**
 
 Each route in the hierarchy is a potential error boundary.
 if a nested route exports and error boundary, then any errors below it will be caught and rendered there.
@@ -512,3 +597,33 @@ the rest of the app renders OK and only the invoice section of the page will ren
 ![image](https://remix.run/docs-images/error-boundary.png "asdas")
 
 If a route doesn't have an error boundary, the error "bubbles up" to the closest error boundary, all the way to the root, so you don't have to add error boundaries to every route--only when you want to add that extra touch to your UI.
+
+### **CatchBoundary**
+
+a `CatchBoundary` is a react component that renders when an action or loaders throws a **`Response`**
+
+Remix use the word "catch" to represent the codepath taken when a `Response` type is thrown.
+`CatchBoundary` created for when we want to show ui that is not part of the "Happy Path" of the application
+404 pages is a great example for catch boundary.
+
+the catch boundary is different from `ErrorBoundary` by that error boundary is meant for error we did not expect to occur!
+
+A `CatchBoundary` component has access to the status code and thrown response data through `useCatch`.
+
+```javascript
+import { useCatch } from "@remix-run/react";
+
+export function CatchBoundary() {
+  const caught = useCatch();
+
+  return (
+    <div>
+      <h1>Caught</h1>
+      <p>Status: {caught.status}</p>
+      <pre>
+        <code>{JSON.stringify(caught.data, null, 2)}</code>
+      </pre>
+    </div>
+  );
+}
+```
