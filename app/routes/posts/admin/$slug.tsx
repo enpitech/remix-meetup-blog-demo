@@ -13,6 +13,7 @@ import {
   checkForErrors,
 } from "~/models/post.server";
 import type { PostLoaderData } from "../$slug";
+import { useEffect, useRef } from "react";
 
 enum Actions {
   Delete = "delete",
@@ -70,6 +71,12 @@ export default function EditPost() {
   const errors = useActionData();
   const inputClassName = `w-full rounded border border-gray-500 px-2 py-1 text-lg`;
 
+  let formRef = useRef(null);
+
+  useEffect(() => {
+    formRef.current?.reset();
+  }, []);
+
   return (
     <div>
       <div className="inline-block">
@@ -84,7 +91,7 @@ export default function EditPost() {
         </Form>
       </div>
       <div>
-        <Form method="post" className="flex w-full flex-col">
+        <Form ref={formRef} method="post" className="flex w-full flex-col">
           <label>
             Title:
             <input
