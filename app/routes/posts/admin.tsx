@@ -51,7 +51,7 @@ export default function PostAdmin() {
             ) : null}
           </ul>
         </nav>
-        <main className="col-span-4  md:col-span-3">
+        <main className="col-span-4 md:col-span-3">
           <Outlet />
         </main>
       </div>
