@@ -4,7 +4,7 @@ import { json, redirect } from "@remix-run/node";
 import { createPost } from "~/models/post.server";
 import invariant from "tiny-invariant";
 
-const inputClassName = `w-full rounded border border-gray-500 px-2 py-1 text-lg`;
+export const inputClassName = `w-full rounded border border-gray-500 px-2 py-1 text-lg`;
 
 type ActionData =
   | { title: null | string; slug: null | string; markdown: null | string }

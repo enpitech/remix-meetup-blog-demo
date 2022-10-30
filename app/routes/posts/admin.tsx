@@ -3,6 +3,7 @@ import { json } from "@remix-run/node";
 import { Link, Outlet, useLoaderData, useTransition } from "@remix-run/react";
 
 import { getPosts } from "~/models/post.server";
+import { Actions } from "./admin/$slug";
 
 type LoaderData = {
   posts: Awaited<ReturnType<typeof getPosts>>;
@@ -16,6 +17,7 @@ export default function PostAdmin() {
   const transition = useTransition();
 
   const { posts } = useLoaderData<LoaderData>();
+
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="my-6 mb-2 border-b-2 text-center text-3xl">Blog Admin</h1>
@@ -29,7 +31,11 @@ export default function PostAdmin() {
                 </Link>
               </li>
             ))}
-            {transition.submission ? (
+            {transition.submission &&
+            Object.fromEntries(transition.submission.formData).action !==
+              Actions.Update &&
+            Object.fromEntries(transition.submission.formData).action !==
+              Actions.Delete ? (
               <Link
                 to={
                   Object.fromEntries(transition.submission.formData)

@@ -1,108 +1,125 @@
+import { Form, useActionData, useLoaderData } from "@remix-run/react";
 import {
-  Form,
-  useActionData,
-  useLoaderData,
-  useTransition,
-} from "@remix-run/react";
-import {
-  ActionFunction,
+  type ActionFunction,
   json,
-  LoaderFunction,
   redirect,
-} from "@remix-run/server-runtime";
+  type LoaderFunction,
+} from "@remix-run/node";
 import invariant from "tiny-invariant";
-import { deletePost, getPost, Post, updatePost } from "~/models/post.server";
+import {
+  getPost,
+  updatePost,
+  deletePost,
+  checkForErrors,
+} from "~/models/post.server";
+import type { PostLoaderData } from "../$slug";
 
-export const loader: LoaderFunction = async ({ request, params }) => {
-  invariant(params.slug, "Slug must be defined");
+export enum Actions {
+  Delete = "delete",
+  Update = "update",
+}
+
+export const loader: LoaderFunction = async ({ params }) => {
+  invariant(params.slug, `params.slug is required`);
 
   const post = await getPost(params.slug);
+  invariant(post, `Post not found: ${params.slug}`);
 
-  return json(post);
+  return json<Pick<PostLoaderData, "post">>({ post });
 };
 
 export const action: ActionFunction = async ({ request, params }) => {
-  invariant(params.slug, "Slug must be defined");
-
   // TODO: remove this fake delay
-  await new Promise((res) => setTimeout(res, 3000));
+  await new Promise((res) => setTimeout(res, 1000));
 
-  switch (request.method) {
-    case "DELETE": {
-      await deletePost(params.slug);
-      return redirect("/posts/admin");
-    }
-    case "PUT": {
-      const formData = await request.formData();
-      const post = Object.fromEntries(formData);
+  invariant(params.slug, "params.slug must be defined");
+  const { slug } = params;
+  const formData = await request.formData();
+  const action = formData.get("action");
 
-      await updatePost(
-        params.slug,
-        post as Pick<Post, "slug" | "title" | "markdown">
-      );
-      return redirect(`/posts/${post.slug}`);
-    }
+  if (action === Actions.Delete) {
+    await deletePost(slug);
   }
-  return {};
+
+  if (action === Actions.Update) {
+    const title = formData.get("title");
+    const markdown = formData.get("markdown");
+    const updatedSlug = formData.get("slug");
+    const { errors, hasErrors } = checkForErrors({
+      slug: updatedSlug,
+      title,
+      markdown,
+    });
+
+    if (hasErrors) {
+      return json(errors);
+    }
+
+    invariant(typeof title === "string", "Title must be a string");
+    invariant(typeof updatedSlug === "string", "Slug must be a string");
+    invariant(typeof markdown === "string", "Markdown must be a string");
+
+    await updatePost(slug, { slug: updatedSlug, title, markdown });
+  }
+
+  return redirect("/posts/admin");
 };
 
-export default function PostSlug() {
-  const post = useLoaderData<Post>();
-  const transition = useTransition();
+export default function EditPost() {
+  const { post } = useLoaderData<PostLoaderData>();
+  const errors = useActionData();
   const inputClassName = `w-full rounded border border-gray-500 px-2 py-1 text-lg`;
-  const isSubmitting = transition.state === "submitting";
 
   return (
     <div>
-      <h1>{post.title}</h1>
-
-      <Form method="delete">
-        <button className="bg-red-500 p-3 text-white">Delete</button>
-      </Form>
-
-      <Form method="put">
-        <p>
+      <div className="inline-block">
+        <Form method="post">
+          <input type="hidden" name="action" value={Actions.Delete} />
+          <button
+            type="submit"
+            className="rounded bg-red-500 p-3 text-white hover:scale-125"
+          >
+            Delete Post
+          </button>
+        </Form>
+      </div>
+      <div>
+        <Form method="post" className="flex w-full flex-col">
           <label>
-            Post Title:{" "}
+            Title:
             <input
               type="text"
               name="title"
-              className={inputClassName}
               defaultValue={post.title}
+              className={inputClassName}
             />
           </label>
-        </p>
-        <p>
           <label>
-            Post Slug:{" "}
+            Slug:
             <input
               type="text"
               name="slug"
-              className={inputClassName}
               defaultValue={post.slug}
+              className={inputClassName}
             />
           </label>
-        </p>
-        <p>
-          <label htmlFor="markdown">Markdown:</label>
-          <br />
-          <textarea
-            id="markdown"
-            rows={4}
-            name="markdown"
-            defaultValue={post.markdown}
-            className={`${inputClassName} font-mono`}
-          />
-        </p>
-        <p className="text-right">
+          <label>
+            Markdown:
+            <textarea
+              name="markdown"
+              defaultValue={post.markdown}
+              className={inputClassName}
+            />
+          </label>
           <button
             type="submit"
             className="rounded bg-blue-500 py-2 px-4 text-white hover:bg-blue-600 focus:bg-blue-400 disabled:bg-blue-300"
           >
-            {isSubmitting ? "Updating...." : "Update"}
+            Update Post
           </button>
-        </p>
-      </Form>
+          <input type="hidden" name="action" value={Actions.Update} />
+        </Form>
+      </div>
     </div>
   );
 }
