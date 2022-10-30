@@ -7,7 +7,7 @@ import invariant from "tiny-invariant";
 import type { Post } from "~/models/post.server";
 import { getPost } from "~/models/post.server";
 
-type LoaderData = { post: Post; html: string };
+export type PostLoaderData = { post: Post; html: string };
 
 export const loader: LoaderFunction = async ({ params }) => {
   invariant(params.slug, `params.slug is required`);
@@ -16,11 +16,11 @@ export const loader: LoaderFunction = async ({ params }) => {
   invariant(post, `Post not found: ${params.slug}`);
 
   const html = marked(post.markdown);
-  return json<LoaderData>({ post, html });
+  return json<PostLoaderData>({ post, html });
 };
 
 export default function PostSlug() {
-  const { post, html } = useLoaderData<LoaderData>();
+  const { post, html } = useLoaderData<PostLoaderData>();
   return (
     <main className="mx-auto max-w-4xl">
       <h1 className="my-6 border-b-2 text-center text-3xl">{post.title}</h1>
